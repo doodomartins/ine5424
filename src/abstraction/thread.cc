@@ -17,7 +17,6 @@ Scheduler_Timer * Thread::_timer;
 Thread* volatile Thread::_running;
 Thread::Queue Thread::_ready;
 Thread::Queue Thread::_suspended;
-
 // Methods
 void Thread::constructor_prolog(unsigned int stack_size)
 {
@@ -139,6 +138,36 @@ void Thread::resume()
    unlock();
 }
 
+void Thread::sleep(Queue * sleeping)
+{
+    Thread* thread = running();
+    _ready.remove(thread);
+    thread->_state = WAITING;
+    sleeping->insert(&thread->_link);
+    Thread* next = _ready.remove()->object();
+    dispatch(thread, next);
+    unlock();
+}
+
+void Thread::wakeup(Queue * sleeping)
+{   
+    if(!sleeping->empty()) {
+        Thread * thread = sleeping->remove()->object();
+        thread->_state = READY;
+        _ready.insert(&thread->_link);
+    }
+    unlock();
+}
+
+void Thread::wakeup_all(Queue * sleeping)
+{
+    while(!sleeping->empty()) {
+        Thread * thread = sleeping->remove()->object();
+        thread->_state = READY;
+        _ready.insert(&thread->_link);
+    }
+    unlock();
+}
 
 // Class methods
 void Thread::yield()
