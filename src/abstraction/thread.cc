@@ -157,6 +157,7 @@ void Thread::sleep(Queue * sleeping)
 
 void Thread::wakeup(Queue * sleeping)
 {   
+    lock();
     if(!sleeping->empty()) {
         Thread * thread = sleeping->remove()->object();
         thread->_state = READY;
@@ -167,6 +168,7 @@ void Thread::wakeup(Queue * sleeping)
 
 void Thread::wakeup_all(Queue * sleeping)
 {
+    lock();
     while(!sleeping->empty()) {
         Thread * thread = sleeping->remove()->object();
         thread->_state = READY;

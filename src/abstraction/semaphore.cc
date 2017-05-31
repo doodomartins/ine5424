@@ -20,13 +20,6 @@ void Semaphore::p()
 {
     db<Synchronizer>(TRC) << "Semaphore::p(this=" << this << ",value=" << _value << ")" << endl;
 
-
-    // begin_atomic();
-    // fdec(_value);
-    // while(_value < 0) {
-    //     yield(); // implicit unlock()
-    // }
-
     begin_atomic();
     fdec(_value);
     if(_value < 0) {
