@@ -14,6 +14,9 @@ protected:
     Thread::Queue _sleeping;
     Synchronizer_Common() {}
 
+    ~Synchronizer_Common() {
+        wakeup_all();
+    }
     // Atomic operations
     bool tsl(volatile bool & lock) { return CPU::tsl(lock); }
     int finc(volatile int & number) { return CPU::finc(number); }
@@ -26,7 +29,7 @@ protected:
     void sleep() {
         Thread::sleep(&_sleeping);
     } // implicit unlock()
-    void wakeup() { 
+    void wakeup() {
         Thread::wakeup(&_sleeping);
     } // implicit unlock()
     void wakeup_all() {

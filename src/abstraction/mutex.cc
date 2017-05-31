@@ -34,11 +34,12 @@ void Mutex::unlock()
     db<Synchronizer>(TRC) << "Mutex::unlock(this=" << this << ")" << endl;
 
     begin_atomic();
-    if(_sleeping.empty()) {
-        _locked = false;
-        end_atomic();
-    } else {
+    _locked = false;
+
+    if(!_sleeping.empty()) {
         wakeup(); // implicit end_atomic()
+    } else {
+        end_atomic();
     }
 }
 

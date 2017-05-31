@@ -140,12 +140,17 @@ void Thread::resume()
 
 void Thread::sleep(Queue * sleeping)
 {
+    lock();
     Thread* thread = running();
-    _ready.remove(thread);
     thread->_state = WAITING;
     sleeping->insert(&thread->_link);
-    Thread* next = _ready.remove()->object();
-    dispatch(thread, next);
+    if(!_ready.empty()){
+        _running = _ready.remove()->object();
+        _running->_state = RUNNING;
+        dispatch(thread, _running);
+    } else {
+        idle();
+    }
     unlock();
 }
 
