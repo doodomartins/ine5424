@@ -108,20 +108,17 @@ void Thread::suspend()
 
     db<Thread>(TRC) << "Thread::suspend(this=" << this << ")" << endl;
 
-    if(_running != this)
-        _ready.remove(this);
-
     _state = SUSPENDED;
     _suspended.insert(&_link);
 
-    if((_running == this) && !_ready.empty()) {
+    if(_running != this) {
+        _ready.remove(this);
+    } else {
         _running = _ready.remove()->object();
         _running->_state = RUNNING;
 
         dispatch(this, _running);
-    } else
-        idle(); // implicit unlock()
-
+    }
     unlock();
 }
 
@@ -145,13 +142,9 @@ void Thread::sleep(Queue * sleeping)
     Thread* thread = running();
     thread->_state = WAITING;
     sleeping->insert(&thread->_link);
-    if(!_ready.empty()){
-        _running = _ready.remove()->object();
-        _running->_state = RUNNING;
-        dispatch(thread, _running);
-    } else {
-        idle();
-    }
+    _running = _ready.remove()->object();
+    _running->_state = RUNNING;
+    dispatch(thread, _running);
     unlock();
 }
 
@@ -184,17 +177,14 @@ void Thread::yield()
 
     db<Thread>(TRC) << "Thread::yield(running=" << _running << ")" << endl;
 
-    if(!_ready.empty()) {
-        Thread * prev = _running;
-        prev->_state = READY;
-        _ready.insert(&prev->_link);
+    Thread * prev = _running;
+    prev->_state = READY;
+    _ready.insert(&prev->_link);
 
-        _running = _ready.remove()->object();
-        _running->_state = RUNNING;
+    _running = _ready.remove()->object();
+    _running->_state = RUNNING;
 
-        dispatch(prev, _running);
-    } else
-        idle();
+    dispatch(prev, _running);
 
     unlock();
 }
@@ -208,12 +198,9 @@ void Thread::exit(int status)
 
     wakeup_all(&(_running->_joined));
 
-    while(_ready.empty() && !_suspended.empty())
-        idle(); // implicit unlock();
-
     lock();
 
-    if(!_ready.empty()) {
+    if(_ready.size() > 1) {
         Thread * prev = _running;
         prev->_state = FINISHING;
         *reinterpret_cast<int *>(prev->_stack) = status;
@@ -223,13 +210,23 @@ void Thread::exit(int status)
 
         dispatch(prev, _running);
     } else {
-        db<Thread>(WRN) << "The last thread in the system has exited!" << endl;
-        if(reboot) {
-            db<Thread>(WRN) << "Rebooting the machine ..." << endl;
-            Machine::reboot();
+        if(!_suspended.empty()) {
+            Thread * prev = _running;
+            _running = _ready.remove()->object();
+            _running->_state = RUNNING;
+            dispatch(prev, _running);
         } else {
-            db<Thread>(WRN) << "Halting the CPU ..." << endl;
-            CPU::halt();
+            db<Thread>(WRN) << "The last thread in the system has exited!" << endl;
+            if(reboot) {
+                db<Thread>(WRN) << "Rebooting the machine ..." << endl;
+                Machine::reboot();
+            } else {
+                db<Thread>(WRN) << "Halting the CPU ..." << endl;
+                CPU::halt();
+            }
+            Thread * idle_thread = _ready.remove()->object();
+            delete idle_thread;
+
         }
     }
 
@@ -274,8 +271,10 @@ int Thread::idle()
     db<Thread>(INF) << "There are no runnable threads at the moment!" << endl;
     db<Thread>(INF) << "Halting the CPU ..." << endl;
 
-    CPU::int_enable();
-    CPU::halt();
+    while(_ready.empty()) {
+        CPU::int_enable();
+        CPU::halt();
+    }
 
     return 0;
 }
