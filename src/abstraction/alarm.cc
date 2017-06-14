@@ -48,19 +48,17 @@ void Alarm::delay(const Microsecond & time)
 {
     db<Alarm>(TRC) << "Alarm::delay(time=" << time << ")" << endl;
 
-    Tick t = _elapsed + ticks(time);
-
-    while(_elapsed < t);
+    Semaphore s(0);
+    Semaphore_Handler handler(&s);
+    Alarm alarm(time, &handler, 1);
+    s.p();
+  
 }
-
 
 void Alarm::handler(const IC::Interrupt_Id & i)
 {
-    static Tick next_tick;
-    static Handler * next_handler;
-
     lock();
-
+ 
     _elapsed++;
 
     if(Traits<Alarm>::visible) {
@@ -72,30 +70,24 @@ void Alarm::handler(const IC::Interrupt_Id & i)
         display.position(lin, col);
     }
 
-    if(next_tick)
-        next_tick--;
-    if(!next_tick) {
-        if(next_handler) {
-            db<Alarm>(TRC) << "Alarm::handler(h=" << reinterpret_cast<void *>(next_handler) << ")" << endl;
-            (*next_handler)();
-        }
-        if(_request.empty())
-            next_handler = 0;
-        else {
+    if(!_request.empty()) {
+        if(_request.head()->promote() <= 0) {
             Queue::Element * e = _request.remove();
             Alarm * alarm = e->object();
-            next_tick = alarm->_ticks;
-            next_handler = alarm->_handler;
+
             if(alarm->_times != -1)
                 alarm->_times--;
             if(alarm->_times) {
                 e->rank(alarm->_ticks);
                 _request.insert(e);
             }
-        }
-    }
 
-    unlock();
+            unlock();
+            (*alarm->_handler)();
+        }
+    } else {
+        unlock();
+    }    
 }
 
 __END_SYS
